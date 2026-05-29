@@ -1,6 +1,6 @@
 // Hush — minimal cache-first service worker.
 // Bump CACHE_NAME by one whenever index.html or any cached file changes.
-const CACHE_NAME = 'hush-v9';
+const CACHE_NAME = 'hush-v13';
 
 // Core files to cache. Relative paths only (served from a GitHub Pages sub-path).
 const CORE_ASSETS = [

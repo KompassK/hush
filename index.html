@@ -179,12 +179,19 @@
       }
     }
 
-    // ---- Render ----
+    // ---- Render (data-driven, in-place) ----
+    // The 72 cell+jewel elements are created ONCE by mountBoard(). After that we
+    // never rebuild the board — we only update the cells whose data changed, via
+    // syncCell(), so the DOM always matches board[][] exactly. The upcoming
+    // clearing and cascade stages build on this same single-cell update pattern.
     const gameEl = document.getElementById('game');
+    const tiles = [];   // tiles[r][c] = the jewel element living in cell (r, c)
 
-    function render() {
+    function mountBoard() {
       gameEl.innerHTML = '';
+      tiles.length = 0;
       for (let r = 0; r < ROWS; r++) {
+        tiles[r] = [];
         for (let c = 0; c < COLS; c++) {
           const cell = document.createElement('div');
           cell.className = 'cell ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
@@ -197,17 +204,101 @@
 
           cell.appendChild(jewel);
           gameEl.appendChild(cell);
+          tiles[r][c] = jewel;
         }
       }
     }
 
+    // Make cell (r, c)'s jewel match board[r][c] and rest cleanly in its own
+    // cell: repaint its colour and strip any drag/animation transform, easing
+    // hints and drag classes. This is the one place that reconciles DOM to data.
+    function syncCell(r, c) {
+      const jewel = tiles[r][c];
+      const v = board[r][c];
+      jewel.style.transition = '';
+      jewel.style.transform = '';
+      jewel.style.willChange = '';
+      jewel.classList.remove('lift');
+      jewel.parentNode.classList.remove('active');
+      if (v === null || v === undefined) {
+        // Empty cell: the jewel is hidden, leaving the faint chessboard square.
+        jewel.style.opacity = '0';
+      } else {
+        jewel.style.setProperty('--c', COLORS[v]);
+        jewel.style.opacity = '';
+      }
+    }
+
     buildBoard();
-    render();
+    mountBoard();
+
+    // ---- Matches ----
+    // Scan the whole board for runs of 3+ same-colour tiles (rows and columns).
+    // Empty cells (null) never take part. Returns a Set of "r,c" keys.
+    function findMatches() {
+      const matched = new Set();
+
+      function scanRun(cells) {
+        let start = 0;
+        for (let i = 1; i <= cells.length; i++) {
+          const prev = cells[i - 1].v;
+          const cur = i < cells.length ? cells[i].v : null;
+          const same = i < cells.length && prev !== null && cur === prev;
+          if (!same) {
+            if (i - start >= 3 && prev !== null) {
+              for (let k = start; k < i; k++) {
+                matched.add(cells[k].r + ',' + cells[k].c);
+              }
+            }
+            start = i;
+          }
+        }
+      }
+
+      for (let r = 0; r < ROWS; r++) {
+        const row = [];
+        for (let c = 0; c < COLS; c++) row.push({ r: r, c: c, v: board[r][c] });
+        scanRun(row);
+      }
+      for (let c = 0; c < COLS; c++) {
+        const col = [];
+        for (let r = 0; r < ROWS; r++) col.push({ r: r, c: c, v: board[r][c] });
+        scanRun(col);
+      }
+      return matched;
+    }
+
+    // Softly dissolve every matched tile (fade + gentle shrink), then empty those
+    // cells in the data and reconcile them. Calls done() once all have finished.
+    function dissolveMatches(matched, done) {
+      const opts = { duration: DISSOLVE_MS, easing: 'ease', fill: 'forwards' };
+      let pending = matched.size;
+      if (pending === 0) { done(); return; }
+      matched.forEach(function (key) {
+        const parts = key.split(',');
+        const mr = +parts[0], mc = +parts[1];
+        const jewel = tiles[mr][mc];
+        jewel.style.willChange = 'transform, opacity';
+        const anim = jewel.animate([
+          { opacity: 1, transform: 'scale(1)' },
+          { opacity: 0, transform: 'scale(0.4)' }
+        ], opts);
+        anim.onfinish = function () {
+          anim.cancel();
+          board[mr][mc] = null;
+          syncCell(mr, mc);
+          pending--;
+          if (pending === 0) done();
+        };
+      });
+    }
 
     // ---- Drag-to-swap (Pointer Events) ----
-    // Drag a tile toward an orthogonally adjacent tile; on release the two
-    // swap with a gentle animation. Any swap is allowed for now.
+    // Drag a tile toward an orthogonally adjacent tile; on release the two swap
+    // with a gentle animation. If the swap forms a match the matched tiles
+    // dissolve; if not, the swap quietly reverts.
     const SWAP_MS = 180;          // swap / revert animation duration
+    const DISSOLVE_MS = 280;      // matched-tile dissolve duration
     const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
     const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
     const NUDGE_FRACTION = 0.66;  // how far the HELD jewel nudges (of one cell)
@@ -228,14 +319,21 @@
       heldT: 0           // applied (capped) nudge offset of the held jewel
     };
 
-    function jewelAt(r, c) {
-      return gameEl.children[r * COLS + c].querySelector('.jewel');
+    // Snap a jewel cleanly back to its home cell (used when the neighbour we are
+    // pushing changes mid-gesture — e.g. the drag flips direction or hits an edge).
+    function resetTile(jewel) {
+      if (!jewel) return;
+      jewel.style.transition = 'none';
+      jewel.style.transform = '';
+      jewel.style.willChange = '';
     }
 
     function onPointerDown(e) {
       if (drag.animating || drag.active) return;
       const cell = e.target.closest('.cell');
       if (!cell || !gameEl.contains(cell)) return;
+      // Don't grab an empty cell.
+      if (board[+cell.dataset.row][+cell.dataset.col] === null) return;
 
       drag.active = true;
       drag.id = e.pointerId;
@@ -250,7 +348,7 @@
       drag.startX = e.clientX;
       drag.startY = e.clientY;
       drag.cell = cell;
-      drag.jewel = cell.querySelector('.jewel');
+      drag.jewel = tiles[drag.r][drag.c];
 
       const rect = cell.getBoundingClientRect();
       const gap = parseFloat(getComputedStyle(gameEl).rowGap) || 0;
@@ -278,17 +376,25 @@
       const nr = drag.r + (drag.axis === 'v' ? sign : 0);
       const nc = drag.c + (drag.axis === 'h' ? sign : 0);
       const inBounds = nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS;
+      const newNeighbour = inBounds ? tiles[nr][nc] : null;
+
+      // If we're now pushing a different neighbour (drag flipped direction, or
+      // moved off the board edge), snap the previous one cleanly back home.
+      if (drag.nJewel && drag.nJewel !== newNeighbour) {
+        resetTile(drag.nJewel);
+      }
 
       // Raw finger travel toward the chosen neighbour (0 if there is none, e.g.
       // at the board edge). This — not the visual nudge — decides the swap.
       drag.rawT = inBounds ? off : 0;
-      drag.nJewel = inBounds ? jewelAt(nr, nc) : null;
+      drag.nJewel = newNeighbour;
       drag.nr = inBounds ? nr : -1;
       drag.nc = inBounds ? nc : -1;
 
       // The held jewel only NUDGES a short way toward the neighbour — enough to
-      // show direction/intent — so it never travels fully onto it. The full
-      // exchange happens on release.
+      // show direction/intent — so it never travels fully onto it. The neighbour
+      // reacts by nudging the opposite way by the same amount, so on release both
+      // have the same distance left and exchange at a matching, even speed.
       const nudgeMag = inBounds
         ? Math.min(Math.abs(off), drag.step * NUDGE_FRACTION)
         : 0;
@@ -302,6 +408,13 @@
       drag.jewel.style.transition = 'none';
       drag.jewel.style.transform =
         'translate3d(' + tx + 'px, ' + ty + 'px, 0) scale(1.06)';
+
+      if (drag.nJewel) {
+        drag.nJewel.style.willChange = 'transform'; // promote to its own layer
+        drag.nJewel.style.transition = 'none';
+        drag.nJewel.style.transform =
+          'translate3d(' + (-tx) + 'px, ' + (-ty) + 'px, 0)';
+      }
     }
 
     function onPointerUp(e) {
@@ -320,53 +433,115 @@
         !cancelled && drag.nJewel &&
         Math.abs(drag.rawT) > drag.step * COMMIT_FRACTION;
 
-      const sign = drag.rawT < 0 ? -1 : 1;
+      const axis = drag.axis;
       const step = drag.step;
-      // Held jewel: from its current small nudge to the neighbour's cell.
-      const cx = drag.axis === 'h' ? drag.heldT : 0;
-      const cy = drag.axis === 'v' ? drag.heldT : 0;
-      const fx = commit && drag.axis === 'h' ? sign * step : 0;
-      const fy = commit && drag.axis === 'v' ? sign * step : 0;
-      // Neighbour: from its own (untouched) cell to the held jewel's cell.
-      const nfx = commit && drag.axis === 'h' ? -sign * step : 0;
-      const nfy = commit && drag.axis === 'v' ? -sign * step : 0;
+      const sign = drag.rawT < 0 ? -1 : 1;
+
+      // Both jewels are mid-nudge: held at +heldT, neighbour at -heldT. On commit
+      // they finish the exchange (held -> neighbour's cell, neighbour -> held's
+      // cell); otherwise both ease back home. Because they start mirrored and
+      // travel the same remaining distance, the two sides move at an even speed.
+      const cHeld = drag.heldT;
+      const fHeld = commit ? sign * step : 0;
+      const cNbr = -drag.heldT;
+      const fNbr = commit ? -sign * step : 0;
+
+      const xy = function (v) {
+        return 'translate3d(' +
+          (axis === 'h' ? v : 0) + 'px, ' + (axis === 'v' ? v : 0) + 'px, 0)';
+      };
 
       drag.animating = true;
 
-      // Animate BOTH jewels with the Web Animations API, kicked off in the same
+      // Animate BOTH jewels with the Web Animations API, started in the same
       // synchronous block so they share a start time and move together as one
-      // smooth exchange — the held jewel completing its journey and the
-      // neighbour travelling from its original cell, simultaneously. Same calm
-      // pace + easing.
+      // smooth exchange. Same calm pace + easing.
       const opts = { duration: SWAP_MS, easing: 'ease', fill: 'forwards' };
 
       drag.jewel.style.transition = 'none';
-      drag.jewel.animate([
-        { transform: 'translate3d(' + cx + 'px, ' + cy + 'px, 0) scale(1.06)' },
-        { transform: 'translate3d(' + fx + 'px, ' + fy + 'px, 0) scale(1)' }
+      const a1 = drag.jewel.animate([
+        { transform: xy(cHeld) + ' scale(1.06)' },
+        { transform: xy(fHeld) + ' scale(1)' }
       ], opts);
 
-      if (commit && drag.nJewel) {
+      let a2 = null;
+      if (drag.nJewel) {
+        drag.nJewel.style.willChange = 'transform'; // keep neighbour on its layer
         drag.nJewel.style.transition = 'none';
-        drag.nJewel.animate([
-          { transform: 'translate3d(0, 0, 0)' },
-          { transform: 'translate3d(' + nfx + 'px, ' + nfy + 'px, 0)' }
+        a2 = drag.nJewel.animate([
+          { transform: xy(cNbr) },
+          { transform: xy(fNbr) }
         ], opts);
       }
 
       const r = drag.r, c = drag.c, nr = drag.nr, nc = drag.nc;
 
-      setTimeout(function () {
-        if (commit) {
-          const tmp = board[r][c];
-          board[r][c] = board[nr][nc];
-          board[nr][nc] = tmp;
-        }
-        // Rebuild from state — clears all inline transforms/transitions cleanly.
-        render();
+      function endGesture() {
         drag.animating = false;
         drag.jewel = drag.cell = drag.nJewel = null;
-      }, SWAP_MS);
+      }
+
+      // Slide the held + neighbour jewels swapping in the given axis direction,
+      // then run after(). Used to play (or un-play) a swap from rest.
+      function slideSwap(dir, after) {
+        const j1 = tiles[r][c], j2 = tiles[nr][nc];
+        const move = function (v) {
+          return 'translate3d(' +
+            (axis === 'h' ? v : 0) + 'px, ' + (axis === 'v' ? v : 0) + 'px, 0)';
+        };
+        j1.style.willChange = 'transform';
+        j2.style.willChange = 'transform';
+        j1.style.transition = 'none';
+        j2.style.transition = 'none';
+        const b1 = j1.animate(
+          [{ transform: move(0) }, { transform: move(dir * step) }], opts);
+        const b2 = j2.animate(
+          [{ transform: move(0) }, { transform: move(-dir * step) }], opts);
+        b1.onfinish = function () {
+          b1.cancel();
+          b2.cancel();
+          after();
+        };
+      }
+
+      // #3: finish exactly when the animation ends (no setTimeout drift). Cancel
+      // the fill-forwards effects, then reconcile ONLY the affected cells to the
+      // data in the same task, so positions don't visibly jump.
+      a1.onfinish = function () {
+        a1.cancel();
+        if (a2) a2.cancel();
+
+        if (!commit) {
+          // Didn't drag far enough (or no neighbour): just settle home.
+          syncCell(r, c);
+          if (nr >= 0) syncCell(nr, nc);
+          endGesture();
+          return;
+        }
+
+        // Apply the swap to the data and land both jewels in their new cells.
+        const tmp = board[r][c];
+        board[r][c] = board[nr][nc];
+        board[nr][nc] = tmp;
+        syncCell(r, c);
+        syncCell(nr, nc);
+
+        const matched = findMatches();
+        if (matched.size > 0) {
+          // Valid swap: dissolve the matched tiles, leaving empty cells.
+          dissolveMatches(matched, endGesture);
+        } else {
+          // No match: gently swap the two tiles back to where they started.
+          slideSwap(sign, function () {
+            const t2 = board[r][c];
+            board[r][c] = board[nr][nc];
+            board[nr][nc] = t2;
+            syncCell(r, c);
+            syncCell(nr, nc);
+            endGesture();
+          });
+        }
+      };
     }
 
     gameEl.addEventListener('pointerdown', onPointerDown);
