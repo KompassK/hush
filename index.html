@@ -75,6 +75,9 @@
       grid-template-rows: repeat(var(--rows), var(--cell));
       gap: var(--gap);
       padding: var(--gap);
+      /* The board owns all touch gestures so the page never scrolls/zooms
+         instead of dragging a tile. */
+      touch-action: none;
     }
 
     /* Very faint chessboard: the same warm background tone nudged a touch
@@ -111,6 +114,20 @@
         inset 0 -3px 5px rgba(0, 0, 0, 0.20),
         0 3px 5px rgba(92, 76, 56, 0.18);
     }
+
+    /* A lifted (being dragged) jewel: gently deeper shadow. It is moved with
+       transform: translate3d(...) only — never left/top — and gets
+       will-change to keep iOS from leaving shadow trails. */
+    .jewel.lift {
+      will-change: transform;
+      box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.30),
+        inset 0 -3px 5px rgba(0, 0, 0, 0.20),
+        0 9px 16px rgba(92, 76, 56, 0.28);
+    }
+
+    /* Raise the dragged cell above its neighbours while swapping. */
+    .cell.active { z-index: 5; }
   </style>
 </head>
 <body>
@@ -186,6 +203,174 @@
 
     buildBoard();
     render();
+
+    // ---- Drag-to-swap (Pointer Events) ----
+    // Drag a tile toward an orthogonally adjacent tile; on release the two
+    // swap with a gentle animation. Any swap is allowed for now.
+    const SWAP_MS = 180;          // swap / revert animation duration
+    const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
+    const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
+
+    const drag = {
+      active: false,
+      animating: false,
+      id: null,
+      axis: null,        // 'h' | 'v' once locked
+      r: 0, c: 0,        // source cell
+      startX: 0, startY: 0,
+      step: 0,           // distance between adjacent cell centres (px)
+      jewel: null,       // dragged jewel element
+      cell: null,        // dragged cell element
+      nJewel: null,      // current neighbour jewel element
+      nr: -1, nc: -1,    // current neighbour cell
+      t: 0               // current signed offset along the locked axis
+    };
+
+    function jewelAt(r, c) {
+      return gameEl.children[r * COLS + c].querySelector('.jewel');
+    }
+
+    function onPointerDown(e) {
+      if (drag.animating || drag.active) return;
+      const cell = e.target.closest('.cell');
+      if (!cell || !gameEl.contains(cell)) return;
+
+      drag.active = true;
+      drag.id = e.pointerId;
+      drag.axis = null;
+      drag.t = 0;
+      drag.nJewel = null;
+      drag.nr = -1;
+      drag.nc = -1;
+      drag.r = +cell.dataset.row;
+      drag.c = +cell.dataset.col;
+      drag.startX = e.clientX;
+      drag.startY = e.clientY;
+      drag.cell = cell;
+      drag.jewel = cell.querySelector('.jewel');
+
+      const rect = cell.getBoundingClientRect();
+      const gap = parseFloat(getComputedStyle(gameEl).rowGap) || 0;
+      drag.step = rect.width + gap;
+
+      gameEl.setPointerCapture(e.pointerId);
+    }
+
+    function onPointerMove(e) {
+      if (!drag.active || e.pointerId !== drag.id) return;
+
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+
+      // Lock to the dominant axis once we've moved enough.
+      if (!drag.axis) {
+        if (Math.abs(dx) < AXIS_LOCK_PX && Math.abs(dy) < AXIS_LOCK_PX) return;
+        drag.axis = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+        drag.jewel.classList.add('lift');
+        drag.cell.classList.add('active');
+      }
+
+      const off = drag.axis === 'h' ? dx : dy;
+      const sign = off < 0 ? -1 : 1;
+      const nr = drag.r + (drag.axis === 'v' ? sign : 0);
+      const nc = drag.c + (drag.axis === 'h' ? sign : 0);
+      const inBounds = nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS;
+
+      // Can't drag past the board edge.
+      let mag = Math.min(Math.abs(off), drag.step);
+      if (!inBounds) mag = 0;
+      const t = sign * mag;
+      drag.t = t;
+
+      const newNeighbour = (inBounds && mag > 0) ? jewelAt(nr, nc) : null;
+
+      // If the neighbour changed (e.g. flipped direction), ease the old one home.
+      if (drag.nJewel && drag.nJewel !== newNeighbour) {
+        drag.nJewel.style.transition = 'transform 120ms ease';
+        drag.nJewel.style.transform = 'translate3d(0, 0, 0)';
+      }
+      drag.nJewel = newNeighbour;
+      drag.nr = inBounds ? nr : -1;
+      drag.nc = inBounds ? nc : -1;
+
+      const tx = drag.axis === 'h' ? t : 0;
+      const ty = drag.axis === 'v' ? t : 0;
+
+      // Follow the finger instantly (no transition) via transform only.
+      drag.jewel.style.transition = 'none';
+      drag.jewel.style.transform =
+        'translate3d(' + tx + 'px, ' + ty + 'px, 0) scale(1.06)';
+
+      if (drag.nJewel) {
+        drag.nJewel.style.transition = 'none';
+        drag.nJewel.style.transform =
+          'translate3d(' + (-tx) + 'px, ' + (-ty) + 'px, 0)';
+      }
+    }
+
+    function onPointerUp(e) {
+      if (!drag.active || e.pointerId !== drag.id) return;
+      drag.active = false;
+      try { gameEl.releasePointerCapture(e.pointerId); } catch (_) {}
+
+      // A tap (never locked an axis): nothing to animate.
+      if (!drag.axis) {
+        drag.jewel = drag.cell = drag.nJewel = null;
+        return;
+      }
+
+      const cancelled = e.type === 'pointercancel';
+      const commit =
+        !cancelled && drag.nJewel && Math.abs(drag.t) > drag.step * COMMIT_FRACTION;
+
+      const sign = drag.t < 0 ? -1 : 1;
+      // Current (mid-drag) offset and the final resting offset.
+      const cx = drag.axis === 'h' ? drag.t : 0;
+      const cy = drag.axis === 'v' ? drag.t : 0;
+      const fx = commit && drag.axis === 'h' ? sign * drag.step : 0;
+      const fy = commit && drag.axis === 'v' ? sign * drag.step : 0;
+
+      drag.animating = true;
+
+      // Animate BOTH jewels with the Web Animations API, kicked off in the same
+      // synchronous block so they share a start time and move together as one
+      // smooth exchange. (Avoids the iOS transition-from-none quirk that made
+      // one jewel snap while the other glided.) Same calm pace + easing.
+      const opts = { duration: SWAP_MS, easing: 'ease', fill: 'forwards' };
+
+      drag.jewel.style.transition = 'none';
+      drag.jewel.animate([
+        { transform: 'translate3d(' + cx + 'px, ' + cy + 'px, 0) scale(1.06)' },
+        { transform: 'translate3d(' + fx + 'px, ' + fy + 'px, 0) scale(1)' }
+      ], opts);
+
+      if (drag.nJewel) {
+        drag.nJewel.style.transition = 'none';
+        drag.nJewel.animate([
+          { transform: 'translate3d(' + (-cx) + 'px, ' + (-cy) + 'px, 0)' },
+          { transform: 'translate3d(' + (-fx) + 'px, ' + (-fy) + 'px, 0)' }
+        ], opts);
+      }
+
+      const r = drag.r, c = drag.c, nr = drag.nr, nc = drag.nc;
+
+      setTimeout(function () {
+        if (commit) {
+          const tmp = board[r][c];
+          board[r][c] = board[nr][nc];
+          board[nr][nc] = tmp;
+        }
+        // Rebuild from state — clears all inline transforms/transitions cleanly.
+        render();
+        drag.animating = false;
+        drag.jewel = drag.cell = drag.nJewel = null;
+      }, SWAP_MS);
+    }
+
+    gameEl.addEventListener('pointerdown', onPointerDown);
+    gameEl.addEventListener('pointermove', onPointerMove);
+    gameEl.addEventListener('pointerup', onPointerUp);
+    gameEl.addEventListener('pointercancel', onPointerUp);
 
     // Register the service worker with a RELATIVE path (GitHub Pages sub-path safe).
     if ('serviceWorker' in navigator) {
