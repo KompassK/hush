@@ -52,35 +52,42 @@
     }
 
     /* ---- Board ----
-       Sized natively with CSS only. Never use a JS transform: scale() on a
-       fixed-width wrapper — that breaks pointer coords + position:fixed drags.
-       Board = the smallest of: 96vmin, or the viewport minus a 16px gutter on
-       each side, so it never touches the edges and never overflows/zooms. */
+       6 columns wide x 12 rows tall. Sized natively with CSS only. Never use a
+       JS transform: scale() on a fixed-width wrapper — that breaks pointer
+       coords + position:fixed drags.
+
+       The board is taller than wide, so the limiting dimension may be width OR
+       height depending on the phone. We size a single square --cell to the
+       SMALLER of (available width / 6) and (available height / 12), leaving a
+       ~16px gutter on every edge. The divisors include the gaps + padding
+       (each = --cell * 0.014): width = cell*(6 + 7*g), height = cell*(12 + 13*g),
+       so the whole board always fits with no overflow and no zoom. */
     #game {
-      --board: min(96vmin, calc(100vw - 32px), calc(100dvh - 32px));
-      --cells: 9;
-      --gap: calc(var(--board) * 0.014);
-      width: var(--board);
-      height: var(--board);
+      --cols: 6;
+      --rows: 12;
+      --cell: min(
+        calc((100vw - 32px) / 6.098),
+        calc((100dvh - 32px) / 12.182)
+      );
+      --gap: calc(var(--cell) * 0.014);
       display: grid;
-      grid-template-columns: repeat(var(--cells), 1fr);
-      grid-template-rows: repeat(var(--cells), 1fr);
+      grid-template-columns: repeat(var(--cols), var(--cell));
+      grid-template-rows: repeat(var(--rows), var(--cell));
       gap: var(--gap);
       padding: var(--gap);
     }
 
-    /* Recessed cell: a soft, low-contrast well in the warm background. */
+    /* Very faint chessboard: the same warm background tone nudged a touch
+       lighter on one set of cells and a touch darker on the other. No borders,
+       outlines, or recesses — it just sits quietly behind the jewels. */
     .cell {
       position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 24%;
-      background: rgba(122, 102, 72, 0.045);
-      box-shadow:
-        inset 0 1px 2px rgba(96, 80, 58, 0.12),
-        inset 0 0 0 1px rgba(122, 102, 72, 0.06);
     }
+    .cell.light { background: #f2ebdf; }
+    .cell.dark  { background: #e9dfce; }
 
     /* Softly three-dimensional jewel: muted, low-gloss, tactile.
        Colour comes from --c (set per cell in JS). Overlays are translucent
@@ -111,7 +118,8 @@
 
   <script>
     // ---- Configuration ----
-    const SIZE = 9; // 9x9 board
+    const ROWS = 12; // board is 6 wide x 12 tall
+    const COLS = 6;
 
     // 5 muted, jewel-inspired colours. Easy to change / tune on device.
     const COLORS = [
@@ -143,12 +151,12 @@
       return choices[Math.floor(Math.random() * choices.length)];
     }
 
-    // Build a full 9x9 board guaranteed free of any initial 3-in-a-row.
+    // Build a full 12x6 board guaranteed free of any initial 3-in-a-row.
     function buildBoard() {
       board = [];
-      for (let r = 0; r < SIZE; r++) {
+      for (let r = 0; r < ROWS; r++) {
         board[r] = [];
-        for (let c = 0; c < SIZE; c++) {
+        for (let c = 0; c < COLS; c++) {
           board[r][c] = pickColorIndex(r, c);
         }
       }
@@ -159,10 +167,10 @@
 
     function render() {
       gameEl.innerHTML = '';
-      for (let r = 0; r < SIZE; r++) {
-        for (let c = 0; c < SIZE; c++) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
           const cell = document.createElement('div');
-          cell.className = 'cell';
+          cell.className = 'cell ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
           cell.dataset.row = r;
           cell.dataset.col = c;
 
