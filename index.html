@@ -481,29 +481,6 @@
         drag.jewel = drag.cell = drag.nJewel = null;
       }
 
-      // Slide the held + neighbour jewels swapping in the given axis direction,
-      // then run after(). Used to play (or un-play) a swap from rest.
-      function slideSwap(dir, after) {
-        const j1 = tiles[r][c], j2 = tiles[nr][nc];
-        const move = function (v) {
-          return 'translate3d(' +
-            (axis === 'h' ? v : 0) + 'px, ' + (axis === 'v' ? v : 0) + 'px, 0)';
-        };
-        j1.style.willChange = 'transform';
-        j2.style.willChange = 'transform';
-        j1.style.transition = 'none';
-        j2.style.transition = 'none';
-        const b1 = j1.animate(
-          [{ transform: move(0) }, { transform: move(dir * step) }], opts);
-        const b2 = j2.animate(
-          [{ transform: move(0) }, { transform: move(-dir * step) }], opts);
-        b1.onfinish = function () {
-          b1.cancel();
-          b2.cancel();
-          after();
-        };
-      }
-
       // #3: finish exactly when the animation ends (no setTimeout drift). Cancel
       // the fill-forwards effects, then reconcile ONLY the affected cells to the
       // data in the same task, so positions don't visibly jump.
@@ -526,20 +503,14 @@
         syncCell(r, c);
         syncCell(nr, nc);
 
+        // A committed swap onto a valid neighbour always stays. If it forms
+        // any matches, dissolve them; if not, just leave the jewels where they
+        // landed (no revert, no message).
         const matched = findMatches();
         if (matched.size > 0) {
-          // Valid swap: dissolve the matched tiles, leaving empty cells.
           dissolveMatches(matched, endGesture);
         } else {
-          // No match: gently swap the two tiles back to where they started.
-          slideSwap(sign, function () {
-            const t2 = board[r][c];
-            board[r][c] = board[nr][nc];
-            board[nr][nc] = t2;
-            syncCell(r, c);
-            syncCell(nr, nc);
-            endGesture();
-          });
+          endGesture();
         }
       };
     }
