@@ -1,0 +1,5 @@
+# Design / strategy docs — keep private, not for the public repo
+*.md
+
+# Local backups
+*-backup.html
