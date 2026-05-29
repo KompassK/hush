@@ -293,12 +293,90 @@
       });
     }
 
+    // ---- Gravity, refill & cascades ----
+    // Collapse every column: existing tiles fall to the bottom, then new tiles
+    // (random COLORS) fill the empty cells above. Mutates board[][] in place and
+    // returns the list of tiles that need to animate, each with the row it should
+    // appear to fall FROM (negative rows mean it drifts in from above the top).
+    function applyGravity() {
+      const moves = [];
+      for (let c = 0; c < COLS; c++) {
+        // Surviving tiles, bottom-most first.
+        const surviving = [];
+        for (let r = ROWS - 1; r >= 0; r--) {
+          if (board[r][c] !== null && board[r][c] !== undefined) {
+            surviving.push({ r: r, v: board[r][c] });
+          }
+        }
+        let dr = ROWS - 1;
+        // Drop the survivors into the lowest cells, preserving their order.
+        for (let i = 0; i < surviving.length; i++, dr--) {
+          const src = surviving[i];
+          board[dr][c] = src.v;
+          if (src.r !== dr) {
+            moves.push({ r: dr, c: c, from: src.r, v: src.v });
+          }
+        }
+        // Refill the remaining cells above, drifting in from over the top.
+        let from = -1;
+        for (; dr >= 0; dr--, from--) {
+          const v = Math.floor(Math.random() * COLORS.length);
+          board[dr][c] = v;
+          moves.push({ r: dr, c: c, from: from, v: v });
+        }
+      }
+      return moves;
+    }
+
+    // Animate the gravity/refill moves: each affected jewel slides down from its
+    // source row to its resting cell, then reconciles. Calls done() when settled.
+    function animateGravity(moves, done) {
+      if (moves.length === 0) { done(); return; }
+      const opts = { duration: FALL_MS, easing: 'ease-in', fill: 'forwards' };
+      let pending = moves.length;
+      moves.forEach(function (m) {
+        const jewel = tiles[m.r][m.c];
+        jewel.classList.remove('lift');
+        jewel.parentNode.classList.remove('active');
+        jewel.style.setProperty('--c', COLORS[m.v]);
+        jewel.style.opacity = '';
+        jewel.style.willChange = 'transform';
+        jewel.style.transition = 'none';
+        const startY = (m.from - m.r) * drag.step; // negative: starts higher up
+        const anim = jewel.animate([
+          { transform: 'translate3d(0, ' + startY + 'px, 0)' },
+          { transform: 'translate3d(0, 0, 0)' }
+        ], opts);
+        anim.onfinish = function () {
+          anim.cancel();
+          syncCell(m.r, m.c);
+          pending--;
+          if (pending === 0) done();
+        };
+      });
+    }
+
+    // Resolve the board to a stable, full state: clear any matches, drop & refill,
+    // then repeat for as long as fresh matches keep appearing. Every clear looks
+    // identical regardless of how deep the chain runs — no counters, no escalation.
+    function resolveCascades(done) {
+      const matched = findMatches();
+      if (matched.size === 0) { done(); return; }
+      dissolveMatches(matched, function () {
+        const moves = applyGravity();
+        animateGravity(moves, function () {
+          resolveCascades(done);
+        });
+      });
+    }
+
     // ---- Drag-to-swap (Pointer Events) ----
     // Drag a tile toward an orthogonally adjacent tile; on release the two swap
     // with a gentle animation. If the swap forms a match the matched tiles
     // dissolve; if not, the swap quietly reverts.
     const SWAP_MS = 180;          // swap / revert animation duration
     const DISSOLVE_MS = 280;      // matched-tile dissolve duration
+    const FALL_MS = 260;          // per-step gravity / refill fall duration
     const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
     const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
     const NUDGE_FRACTION = 0.66;  // how far the HELD jewel nudges (of one cell)
@@ -503,15 +581,10 @@
         syncCell(r, c);
         syncCell(nr, nc);
 
-        // A committed swap onto a valid neighbour always stays. If it forms
-        // any matches, dissolve them; if not, just leave the jewels where they
-        // landed (no revert, no message).
-        const matched = findMatches();
-        if (matched.size > 0) {
-          dissolveMatches(matched, endGesture);
-        } else {
-          endGesture();
-        }
+        // A committed swap onto a valid neighbour always stays. Resolve any
+        // matches it forms — clearing, dropping, refilling and cascading until
+        // the board is stable and full again. No match just leaves it as-is.
+        resolveCascades(endGesture);
       };
     }
 
