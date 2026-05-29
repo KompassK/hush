@@ -210,6 +210,7 @@
     const SWAP_MS = 180;          // swap / revert animation duration
     const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
     const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
+    const NUDGE_FRACTION = 0.66;  // how far the HELD jewel nudges (of one cell)
 
     const drag = {
       active: false,
@@ -223,7 +224,8 @@
       cell: null,        // dragged cell element
       nJewel: null,      // current neighbour jewel element
       nr: -1, nc: -1,    // current neighbour cell
-      t: 0               // current signed offset along the locked axis
+      rawT: 0,           // raw finger offset along the locked axis (uncapped)
+      heldT: 0           // applied (capped) nudge offset of the held jewel
     };
 
     function jewelAt(r, c) {
@@ -238,7 +240,8 @@
       drag.active = true;
       drag.id = e.pointerId;
       drag.axis = null;
-      drag.t = 0;
+      drag.rawT = 0;
+      drag.heldT = 0;
       drag.nJewel = null;
       drag.nr = -1;
       drag.nc = -1;
@@ -276,36 +279,29 @@
       const nc = drag.c + (drag.axis === 'h' ? sign : 0);
       const inBounds = nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS;
 
-      // Can't drag past the board edge.
-      let mag = Math.min(Math.abs(off), drag.step);
-      if (!inBounds) mag = 0;
-      const t = sign * mag;
-      drag.t = t;
-
-      const newNeighbour = (inBounds && mag > 0) ? jewelAt(nr, nc) : null;
-
-      // If the neighbour changed (e.g. flipped direction), ease the old one home.
-      if (drag.nJewel && drag.nJewel !== newNeighbour) {
-        drag.nJewel.style.transition = 'transform 120ms ease';
-        drag.nJewel.style.transform = 'translate3d(0, 0, 0)';
-      }
-      drag.nJewel = newNeighbour;
+      // Raw finger travel toward the chosen neighbour (0 if there is none, e.g.
+      // at the board edge). This — not the visual nudge — decides the swap.
+      drag.rawT = inBounds ? off : 0;
+      drag.nJewel = inBounds ? jewelAt(nr, nc) : null;
       drag.nr = inBounds ? nr : -1;
       drag.nc = inBounds ? nc : -1;
 
-      const tx = drag.axis === 'h' ? t : 0;
-      const ty = drag.axis === 'v' ? t : 0;
+      // The held jewel only NUDGES a short way toward the neighbour — enough to
+      // show direction/intent — so it never travels fully onto it. The full
+      // exchange happens on release.
+      const nudgeMag = inBounds
+        ? Math.min(Math.abs(off), drag.step * NUDGE_FRACTION)
+        : 0;
+      const nudge = sign * nudgeMag;
+      drag.heldT = nudge;
+
+      const tx = drag.axis === 'h' ? nudge : 0;
+      const ty = drag.axis === 'v' ? nudge : 0;
 
       // Follow the finger instantly (no transition) via transform only.
       drag.jewel.style.transition = 'none';
       drag.jewel.style.transform =
         'translate3d(' + tx + 'px, ' + ty + 'px, 0) scale(1.06)';
-
-      if (drag.nJewel) {
-        drag.nJewel.style.transition = 'none';
-        drag.nJewel.style.transform =
-          'translate3d(' + (-tx) + 'px, ' + (-ty) + 'px, 0)';
-      }
     }
 
     function onPointerUp(e) {
@@ -321,21 +317,27 @@
 
       const cancelled = e.type === 'pointercancel';
       const commit =
-        !cancelled && drag.nJewel && Math.abs(drag.t) > drag.step * COMMIT_FRACTION;
+        !cancelled && drag.nJewel &&
+        Math.abs(drag.rawT) > drag.step * COMMIT_FRACTION;
 
-      const sign = drag.t < 0 ? -1 : 1;
-      // Current (mid-drag) offset and the final resting offset.
-      const cx = drag.axis === 'h' ? drag.t : 0;
-      const cy = drag.axis === 'v' ? drag.t : 0;
-      const fx = commit && drag.axis === 'h' ? sign * drag.step : 0;
-      const fy = commit && drag.axis === 'v' ? sign * drag.step : 0;
+      const sign = drag.rawT < 0 ? -1 : 1;
+      const step = drag.step;
+      // Held jewel: from its current small nudge to the neighbour's cell.
+      const cx = drag.axis === 'h' ? drag.heldT : 0;
+      const cy = drag.axis === 'v' ? drag.heldT : 0;
+      const fx = commit && drag.axis === 'h' ? sign * step : 0;
+      const fy = commit && drag.axis === 'v' ? sign * step : 0;
+      // Neighbour: from its own (untouched) cell to the held jewel's cell.
+      const nfx = commit && drag.axis === 'h' ? -sign * step : 0;
+      const nfy = commit && drag.axis === 'v' ? -sign * step : 0;
 
       drag.animating = true;
 
       // Animate BOTH jewels with the Web Animations API, kicked off in the same
       // synchronous block so they share a start time and move together as one
-      // smooth exchange. (Avoids the iOS transition-from-none quirk that made
-      // one jewel snap while the other glided.) Same calm pace + easing.
+      // smooth exchange — the held jewel completing its journey and the
+      // neighbour travelling from its original cell, simultaneously. Same calm
+      // pace + easing.
       const opts = { duration: SWAP_MS, easing: 'ease', fill: 'forwards' };
 
       drag.jewel.style.transition = 'none';
@@ -344,11 +346,11 @@
         { transform: 'translate3d(' + fx + 'px, ' + fy + 'px, 0) scale(1)' }
       ], opts);
 
-      if (drag.nJewel) {
+      if (commit && drag.nJewel) {
         drag.nJewel.style.transition = 'none';
         drag.nJewel.animate([
-          { transform: 'translate3d(' + (-cx) + 'px, ' + (-cy) + 'px, 0)' },
-          { transform: 'translate3d(' + (-fx) + 'px, ' + (-fy) + 'px, 0)' }
+          { transform: 'translate3d(0, 0, 0)' },
+          { transform: 'translate3d(' + nfx + 'px, ' + nfy + 'px, 0)' }
         ], opts);
       }
 
