@@ -14,7 +14,6 @@
       /* warm, soft, low-contrast palette */
       --bg-top: #f4ece0;
       --bg-bottom: #ece1cf;
-      --panel: #f7f1e7;
       --ink: #9c8f7a;
     }
 
@@ -52,35 +51,134 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
 
+    /* ---- Board ----
+       Sized natively with CSS only. Never use a JS transform: scale() on a
+       fixed-width wrapper — that breaks pointer coords + position:fixed drags.
+       Board = the smallest of: 96vmin, or the viewport minus a 16px gutter on
+       each side, so it never touches the edges and never overflows/zooms. */
     #game {
-      width: min(92vw, 92vmin);
-      aspect-ratio: 1 / 1;
-      max-height: 92vh;
-      max-height: 92dvh;
+      --board: min(96vmin, calc(100vw - 32px), calc(100dvh - 32px));
+      --cells: 9;
+      --gap: calc(var(--board) * 0.014);
+      width: var(--board);
+      height: var(--board);
+      display: grid;
+      grid-template-columns: repeat(var(--cells), 1fr);
+      grid-template-rows: repeat(var(--cells), 1fr);
+      gap: var(--gap);
+      padding: var(--gap);
+    }
+
+    /* Recessed cell: a soft, low-contrast well in the warm background. */
+    .cell {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 28px;
-      background: var(--panel);
+      border-radius: 24%;
+      background: rgba(122, 102, 72, 0.045);
       box-shadow:
-        0 1px 2px rgba(120, 105, 80, 0.10),
-        0 12px 30px rgba(120, 105, 80, 0.10);
+        inset 0 1px 2px rgba(96, 80, 58, 0.12),
+        inset 0 0 0 1px rgba(122, 102, 72, 0.06);
     }
 
-    #game .placeholder {
-      font-size: 1.05rem;
-      font-weight: 400;
-      letter-spacing: 0.04em;
-      opacity: 0.6;
+    /* Softly three-dimensional jewel: muted, low-gloss, tactile.
+       Colour comes from --c (set per cell in JS). Overlays are translucent
+       black/white so the facet/highlight works for any base colour. */
+    .jewel {
+      width: 76%;
+      height: 76%;
+      border-radius: 30%;
+      background:
+        radial-gradient(115% 115% at 32% 26%,
+          rgba(255, 255, 255, 0.40) 0%,
+          rgba(255, 255, 255, 0.06) 38%,
+          rgba(255, 255, 255, 0) 60%),
+        linear-gradient(148deg,
+          rgba(255, 255, 255, 0.12) 0%,
+          rgba(0, 0, 0, 0.00) 42%,
+          rgba(0, 0, 0, 0.18) 100%),
+        var(--c, #b9a98f);
+      box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.30),
+        inset 0 -3px 5px rgba(0, 0, 0, 0.20),
+        0 3px 5px rgba(92, 76, 56, 0.18);
     }
   </style>
 </head>
 <body>
-  <div id="game">
-    <span class="placeholder">hush</span>
-  </div>
+  <div id="game"></div>
 
   <script>
+    // ---- Configuration ----
+    const SIZE = 9; // 9x9 board
+
+    // 5 muted, jewel-inspired colours. Easy to change / tune on device.
+    const COLORS = [
+      '#a85661', // ruby
+      '#7d6e99', // amethyst
+      '#4f8a6f', // emerald
+      '#4f6f99', // sapphire
+      '#c29a5b'  // amber
+    ];
+
+    // ---- Board state ----
+    // board[row][col] = index into COLORS. Clear 2D structure.
+    let board = [];
+
+    // Pick a colour index for (r, c) that does NOT complete a run of 3,
+    // i.e. avoid matching the two cells already placed to the left or above.
+    function pickColorIndex(r, c) {
+      const banned = new Set();
+      if (c >= 2 && board[r][c - 1] === board[r][c - 2]) {
+        banned.add(board[r][c - 1]);
+      }
+      if (r >= 2 && board[r - 1][c] === board[r - 2][c]) {
+        banned.add(board[r - 1][c]);
+      }
+      const choices = [];
+      for (let i = 0; i < COLORS.length; i++) {
+        if (!banned.has(i)) choices.push(i);
+      }
+      return choices[Math.floor(Math.random() * choices.length)];
+    }
+
+    // Build a full 9x9 board guaranteed free of any initial 3-in-a-row.
+    function buildBoard() {
+      board = [];
+      for (let r = 0; r < SIZE; r++) {
+        board[r] = [];
+        for (let c = 0; c < SIZE; c++) {
+          board[r][c] = pickColorIndex(r, c);
+        }
+      }
+    }
+
+    // ---- Render ----
+    const gameEl = document.getElementById('game');
+
+    function render() {
+      gameEl.innerHTML = '';
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+
+          const jewel = document.createElement('div');
+          jewel.className = 'jewel';
+          jewel.style.setProperty('--c', COLORS[board[r][c]]);
+
+          cell.appendChild(jewel);
+          gameEl.appendChild(cell);
+        }
+      }
+    }
+
+    buildBoard();
+    render();
+
     // Register the service worker with a RELATIVE path (GitHub Pages sub-path safe).
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
