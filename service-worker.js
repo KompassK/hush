@@ -1,8 +1,11 @@
-// Hush — minimal cache-first service worker.
+// Hush — service worker.
+// Network-first for the HTML so updated versions land as soon as the device is
+// online (cache is only an offline fallback). Other assets stay cache-first.
 // Bump CACHE_NAME by one whenever index.html or any cached file changes.
-const CACHE_NAME = 'hush-v27';
+const CACHE_NAME = 'hush-v28';
 
-// Core files to cache. Relative paths only (served from a GitHub Pages sub-path).
+// Core files to pre-cache for offline. Relative paths only (served from a
+// GitHub Pages sub-path).
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -34,10 +37,40 @@ self.addEventListener('activate', function (event) {
 });
 
 self.addEventListener('fetch', function (event) {
-  if (event.request.method !== 'GET') return;
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  // Is this a request for the page/HTML? (navigations, or anything that
+  // accepts text/html). These go network-first so the newest build wins.
+  const isHTML =
+    req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').indexOf('text/html') !== -1;
+
+  if (isHTML) {
+    event.respondWith(
+      fetch(req)
+        .then(function (res) {
+          // Got the latest from the network — refresh the cached copy.
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(function (cache) {
+            cache.put(req, copy);
+          });
+          return res;
+        })
+        .catch(function () {
+          // Offline — fall back to the cached page.
+          return caches.match(req).then(function (cached) {
+            return cached || caches.match('./index.html');
+          });
+        })
+    );
+    return;
+  }
+
+  // Everything else (icons, manifest): cache-first.
   event.respondWith(
-    caches.match(event.request).then(function (cached) {
-      return cached || fetch(event.request);
+    caches.match(req).then(function (cached) {
+      return cached || fetch(req);
     })
   );
 });
