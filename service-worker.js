@@ -2,7 +2,7 @@
 // Network-first for the HTML so updated versions land as soon as the device is
 // online (cache is only an offline fallback). Other assets stay cache-first.
 // Bump CACHE_NAME by one whenever index.html or any cached file changes.
-const CACHE_NAME = 'hush-v28';
+const CACHE_NAME = 'hush-v32';
 
 // Core files to pre-cache for offline. Relative paths only (served from a
 // GitHub Pages sub-path).

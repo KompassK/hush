@@ -369,11 +369,32 @@
        cue, and it's distinguishable in greyscale by outline alone.
          0 red = heart   1 purple = asscher (cut-corner square)
          2 green = hexagon (flat-top)   3 blue = rhombus (diamond)   4 gold = circle  */
-    .jewel[data-shape="0"] { clip-path: url(#gem-heart); }     /* red */
-    .jewel[data-shape="1"] { clip-path: url(#gem-asscher); }   /* purple */
-    .jewel[data-shape="2"] { clip-path: url(#gem-hexagon); }   /* green */
-    .jewel[data-shape="3"] { clip-path: url(#gem-rhombus); }   /* blue */
-    .jewel[data-shape="4"] { clip-path: url(#gem-circle); }    /* gold */
+    .jewel[data-shape="0"], .balloon[data-shape="0"] { clip-path: url(#gem-heart); }     /* red */
+    .jewel[data-shape="1"], .balloon[data-shape="1"] { clip-path: url(#gem-asscher); }   /* purple */
+    .jewel[data-shape="2"], .balloon[data-shape="2"] { clip-path: url(#gem-hexagon); }   /* green */
+    .jewel[data-shape="3"], .balloon[data-shape="3"] { clip-path: url(#gem-rhombus); }   /* blue */
+    .jewel[data-shape="4"], .balloon[data-shape="4"] { clip-path: url(#gem-circle); }    /* gold */
+
+    /* The 'square pop' balloon: a larger version of the cleared stone's shape
+       that swells up out of the grid and pops. Lives in the fixed overlay, so
+       it's never clipped on iOS. Same calm gem shading as a stone. */
+    .balloon {
+      position: absolute;
+      background:
+        radial-gradient(125% 125% at 30% 24%,
+          rgba(255, 255, 255, 0.50) 0%,
+          rgba(255, 255, 255, 0.12) 32%,
+          rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg,
+          rgba(255, 255, 255, 0.18) 0%,
+          rgba(0, 0, 0, 0.00) 44%,
+          rgba(0, 0, 0, 0.20) 100%),
+        var(--c, #b9a98f);
+      filter: drop-shadow(0 4px 8px rgba(92, 76, 56, 0.30));
+      pointer-events: none;
+      will-change: transform, opacity;
+      transform: translate(-50%, -50%) scale(0.5);
+    }
   </style>
 </head>
 <body>
@@ -416,7 +437,12 @@
       <div class="hud-title">Hush</div>
       <div class="hud-actions">
         <button id="info-btn" class="hud-icon hud-info" type="button" aria-label="How to play">i</button>
-        <button id="settings-btn" class="hud-icon hud-gear" type="button" aria-label="Settings">&#9881;</button>
+        <button id="settings-btn" class="hud-icon hud-gear" type="button" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -440,14 +466,30 @@
         <button id="clear-pop" class="seg-btn" type="button">Pops</button>
       </div>
     </div>
+    <div class="setting">
+      <span class="setting-label">Square pop</span>
+      <div class="seg" role="group" aria-label="Square pop">
+        <button id="square-on" class="seg-btn" type="button">On</button>
+        <button id="square-off" class="seg-btn" type="button">Off</button>
+      </div>
+    </div>
+    <div class="setting">
+      <span class="setting-label">Row pop</span>
+      <div class="seg" role="group" aria-label="Row pop">
+        <button id="row-on" class="seg-btn" type="button">On</button>
+        <button id="row-off" class="seg-btn" type="button">Off</button>
+      </div>
+    </div>
     <button id="settings-close" class="ctrl" type="button">Close</button>
   </div>
 
   <!-- How to play. -->
   <div id="info-panel" class="surface" hidden>
     <h2>How to play</h2>
-    <p>Swap two side-by-side jewels to line up three or more of the same colour. They quietly clear, and new jewels drift in to fill the gaps.</p>
+    <p>Swap two side-by-side stones to line up three or more of the same colour and shape. They pop, and new stones drift down to fill the gaps.</p>
+    <p>Line up five or more, or make a 2×2 square, for a little extra pop. The board keeps flowing on its own.</p>
     <p>There's no score, and no winning or losing. Play for as long as you like.</p>
+    <p>The gear lets you choose how the pops look. The clock just shows your play time.</p>
     <button id="info-close" class="ctrl" type="button">Close</button>
   </div>
 
@@ -479,8 +521,9 @@
     // board[row][col] = index into COLORS. Clear 2D structure.
     let board = [];
 
-    // Pick a colour index for (r, c) that does NOT complete a run of 3,
-    // i.e. avoid matching the two cells already placed to the left or above.
+    // Pick a colour index for (r, c) that does NOT complete a run of 3, nor a
+    // 2x2 square — i.e. avoid matching the two cells already placed to the left
+    // or above, or completing a square with the three cells up/left of here.
     function pickColorIndex(r, c) {
       const banned = new Set();
       if (c >= 2 && board[r][c - 1] === board[r][c - 2]) {
@@ -489,6 +532,11 @@
       if (r >= 2 && board[r - 1][c] === board[r - 2][c]) {
         banned.add(board[r - 1][c]);
       }
+      if (r >= 1 && c >= 1 &&
+          board[r - 1][c - 1] === board[r - 1][c] &&
+          board[r - 1][c] === board[r][c - 1]) {
+        banned.add(board[r - 1][c]);   // would close a 2x2 of the same colour
+      }
       const choices = [];
       for (let i = 0; i < COLORS.length; i++) {
         if (!banned.has(i)) choices.push(i);
@@ -496,7 +544,7 @@
       return choices[Math.floor(Math.random() * choices.length)];
     }
 
-    // Build a full 12x6 board guaranteed free of any initial 3-in-a-row.
+    // Build a full 10x5 board free of any initial 3-in-a-row or 2x2 square.
     function buildBoard() {
       board = [];
       for (let r = 0; r < ROWS; r++) {
@@ -564,22 +612,32 @@
     mountBoard();
 
     // ---- Matches ----
-    // Scan the whole board for runs of 3+ same-colour tiles (rows and columns).
-    // Empty cells (null) never take part. Returns a Set of "r,c" keys.
-    function findMatches() {
-      const matched = new Set();
+    // Scan the whole board for matches and return { cells, lines5, squares }:
+    //   cells   — Set of "r,c" keys for every tile that should clear
+    //   lines5  — arrays of keys, one per run of 5+ in a row/column (row pop)
+    //   squares — { r, c, v } for each 2x2 block of one colour (square pop)
+    // Lines of 3+ always count. A 2x2 square only counts when Square pop is on.
+    // Empty cells (null) never take part.
+    function analyzeBoard() {
+      const cells = new Set();
+      const lines5 = [];
 
-      function scanRun(cells) {
+      function scanRun(line) {
         let start = 0;
-        for (let i = 1; i <= cells.length; i++) {
-          const prev = cells[i - 1].v;
-          const cur = i < cells.length ? cells[i].v : null;
-          const same = i < cells.length && prev !== null && cur === prev;
+        for (let i = 1; i <= line.length; i++) {
+          const prev = line[i - 1].v;
+          const cur = i < line.length ? line[i].v : null;
+          const same = i < line.length && prev !== null && cur === prev;
           if (!same) {
-            if (i - start >= 3 && prev !== null) {
+            const len = i - start;
+            if (len >= 3 && prev !== null) {
+              const run = [];
               for (let k = start; k < i; k++) {
-                matched.add(cells[k].r + ',' + cells[k].c);
+                const key = line[k].r + ',' + line[k].c;
+                cells.add(key);
+                run.push(key);
               }
+              if (len >= 5) lines5.push(run);
             }
             start = i;
           }
@@ -596,46 +654,62 @@
         for (let r = 0; r < ROWS; r++) col.push({ r: r, c: c, v: board[r][c] });
         scanRun(col);
       }
-      return matched;
+
+      // 2x2 squares — only a match when the Square pop feature is enabled.
+      const squares = [];
+      if (SQUARE_POP) {
+        for (let r = 0; r < ROWS - 1; r++) {
+          for (let c = 0; c < COLS - 1; c++) {
+            const v = board[r][c];
+            if (v !== null && v !== undefined &&
+                board[r][c + 1] === v && board[r + 1][c] === v &&
+                board[r + 1][c + 1] === v) {
+              squares.push({ r: r, c: c, v: v });
+              cells.add(r + ',' + c);
+              cells.add(r + ',' + (c + 1));
+              cells.add((r + 1) + ',' + c);
+              cells.add((r + 1) + ',' + (c + 1));
+            }
+          }
+        }
+      }
+
+      return { cells: cells, lines5: lines5, squares: squares };
     }
 
-    // Fire a small ring of colour-matched sparks out from a cell's centre — the
-    // "firework" that accompanies a Pop clear. Each spark drifts outward, shrinks
-    // and fades, then removes itself. Purely decorative; no effect on state.
-    //
-    // iOS Safari notes: sparks live in a single fixed, pointer-transparent
-    // top-level overlay (#spark-layer) — never inside the cell — so no ancestor
-    // clipping or stacking context can hide them. We capture the cell's rect NOW
-    // (before the clear changes anything), place each spark at that viewport
-    // centre, then kick the animation on the NEXT frame so iOS has laid the
-    // element out first (otherwise .animate() silently no-ops there).
-    function burstParticles(cell, color) {
-      const rect = cell.getBoundingClientRect();
-      const size = rect.width;
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const baseSize = Math.max(7, size * 0.26);   // bigger sparks
-      const reach = size * 1.25;                    // travel well beyond the cell
-      const count = 12;                             // more sparks
-      for (let i = 0; i < count; i++) {
+    // Centre + cell size (viewport coords) of a board cell — for placing overlay
+    // bits (sparks, balloons) that must not be clipped by the board on iOS.
+    function cellCenter(r, c) {
+      const rect = tiles[r][c].parentNode.getBoundingClientRect();
+      return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2, size: rect.width };
+    }
+
+    // Fire a ring of colour-matched firework sparks out from a viewport point.
+    // Purely decorative. Sparks live in the fixed top-level overlay (#spark-layer)
+    // so nothing clips them on iOS; each is laid out, then animated on the NEXT
+    // frame (WAAPI otherwise silently no-ops on iOS for freshly-inserted nodes).
+    function burstParticles(cx, cy, size, color, count) {
+      const baseSize = Math.max(7, size * 0.26);
+      const reach = size * 1.25;
+      const n = count || 12;
+      for (let i = 0; i < n; i++) {
         const p = document.createElement('div');
         p.className = 'spark';
-        const sparkSize = baseSize * (0.7 + Math.random() * 0.6);   // varied sizes
+        const sparkSize = baseSize * (0.7 + Math.random() * 0.6);
         p.style.background = color;
         p.style.width = sparkSize + 'px';
         p.style.height = sparkSize + 'px';
-        p.style.boxShadow = '0 0 ' + (sparkSize * 0.9) + 'px ' + color;  // soft glow
+        p.style.boxShadow = '0 0 ' + (sparkSize * 0.9) + 'px ' + color;
         p.style.left = cx + 'px';
         p.style.top = cy + 'px';
-        p.style.transform = 'translate(-50%, -50%)';  // centred before it animates
+        p.style.transform = 'translate(-50%, -50%)';
         sparkLayer.appendChild(p);
 
-        const ang = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+        const ang = (Math.PI * 2 * i) / n + Math.random() * 0.4;
         const r = reach * (0.65 + Math.random() * 0.6);
         const dx = Math.cos(ang) * r;
         const dy = Math.sin(ang) * r;
 
-        // Lay out first, then animate on the next frame (iOS reliability).
         (function (el, dx, dy) {
           requestAnimationFrame(function () {
             const anim = el.animate([
@@ -649,19 +723,15 @@
       }
     }
 
-    // Clear every matched tile by popping it individually (one code path, two
-    // intensities chosen by CLEAR_STYLE):
-    //   'gentle' — a slow, soft swell-then-fade that reads almost like a calm
-    //              dissolve. No particles.
-    //   'pop'    — a quicker, livelier burst, with colour-matched firework
-    //              sparks flung out from the centre.
-    // Either way the cell is emptied + reconciled once its pop finishes; the
-    // depth of a cascade never changes how a single clear looks.
-    function clearMatches(matched, done) {
-      let pending = matched.size;
-      if (pending === 0) { done(); return; }
-      const pop = CLEAR_STYLE === 'pop';
-      const dur = pop ? POP_MS : GENTLE_MS;
+    // ---- Pop effects: PURE DECORATION ----
+    // None of these touch board[][], any pending count, or the cascade. The board
+    // is nulled synchronously up front in clearMatches, and the cascade is
+    // advanced by a single fixed timer — so a dropped animation callback can never
+    // strand a cell. Each grid-jewel animation is pushed to `anims` so clearMatches
+    // can cancel them deterministically before the refill paints.
+
+    // Pop one matched tile on its own (default for 3–4 line matches + leftovers).
+    function individualPop(mr, mc, color, pop, dur, anims) {
       const easing = pop ? 'cubic-bezier(.3,.75,.4,1)' : 'ease';
       const frames = pop
         ? [
@@ -674,24 +744,187 @@
             { opacity: 0.92, transform: 'scale(1.12)', offset: 0.32 },
             { opacity: 0, transform: 'scale(0.25)' }
           ];
-      matched.forEach(function (key) {
-        const parts = key.split(',');
-        const mr = +parts[0], mc = +parts[1];
-        const jewel = tiles[mr][mc];
-        const v = board[mr][mc];
-        if (pop && v !== null && v !== undefined) {
-          burstParticles(jewel.parentNode, COLORS[v]);
-        }
+      if (pop) {
+        const ctr = cellCenter(mr, mc);
+        burstParticles(ctr.cx, ctr.cy, ctr.size, color, 12);
+      }
+      const jewel = tiles[mr][mc];
+      jewel.style.willChange = 'transform, opacity';
+      anims.push(jewel.animate(frames, { duration: dur, easing: easing, fill: 'forwards' }));
+    }
+
+    // 5-in-a-line: the whole run swells together, then pops in one synchronised
+    // burst. Calmer in Gentle, livelier in Pop (one combined spark burst).
+    function linePop(items, pop, dur, anims) {
+      const grow = pop ? 1.42 : 1.36;   // swell up like a balloon before the pop
+      const easing = pop ? 'cubic-bezier(.3,.75,.4,1)' : 'ease';
+      const frames = pop
+        ? [
+            { opacity: 1, transform: 'scale(1)' },
+            { opacity: 1, transform: 'scale(' + grow + ')', offset: 0.55 },
+            { opacity: 0, transform: 'scale(1.75)' }
+          ]
+        : [
+            { opacity: 1, transform: 'scale(1)' },
+            { opacity: 1, transform: 'scale(' + grow + ')', offset: 0.6 },
+            { opacity: 0, transform: 'scale(0.3)' }
+          ];
+      items.forEach(function (it) {
+        const jewel = tiles[it.mr][it.mc];
         jewel.style.willChange = 'transform, opacity';
-        const anim = jewel.animate(frames, { duration: dur, easing: easing, fill: 'forwards' });
-        anim.onfinish = function () {
-          anim.cancel();
-          board[mr][mc] = null;
-          syncCell(mr, mc);
-          pending--;
-          if (pending === 0) done();
-        };
+        anims.push(jewel.animate(frames, { duration: dur, easing: easing, fill: 'forwards' }));
       });
+      if (pop) {
+        // All sparks fire together at the moment the grown line pops.
+        setTimeout(function () {
+          items.forEach(function (it) {
+            const ctr = cellCenter(it.mr, it.mc);
+            burstParticles(ctr.cx, ctr.cy, ctr.size, it.color, 7);
+          });
+        }, dur * 0.45);
+      }
+    }
+
+    // 4-in-a-square: in place of four separate pops, a larger version of that
+    // stone's shape swells up out of the grid (from the 2x2's centre) and pops,
+    // in that colour. Modest, not a jackpot. Rendered in the fixed overlay so it
+    // is never clipped on iOS. The four underlying stones fade as it takes over.
+    function balloonPop(group, v, pop, dur, anims) {
+      const color = COLORS[v];
+      const tl = tiles[group[0][0]][group[0][1]].parentNode.getBoundingClientRect();
+      const br = tiles[group[3][0]][group[3][1]].parentNode.getBoundingClientRect();
+      const cx = (tl.left + br.right) / 2;
+      const cy = (tl.top + br.bottom) / 2;
+      const dim = (br.right - tl.left) * 1.06;   // a touch larger than the 2x2
+      const cellSize = tl.width;
+
+      // Fade the four stones so the balloon replaces them.
+      group.forEach(function (rc) {
+        const jewel = tiles[rc[0]][rc[1]];
+        jewel.style.willChange = 'transform, opacity';
+        anims.push(jewel.animate([{ opacity: 1 }, { opacity: 0 }],
+          { duration: 180, easing: 'ease', fill: 'forwards' }));
+      });
+
+      const easing = pop ? 'cubic-bezier(.3,.75,.4,1)' : 'ease';
+      const frames = pop
+        ? [
+            { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0.7 },
+            { transform: 'translate(-50%, -50%) scale(1.08)', opacity: 1, offset: 0.45 },
+            { transform: 'translate(-50%, -50%) scale(1.35)', opacity: 0 }
+          ]
+        : [
+            { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0.65 },
+            { transform: 'translate(-50%, -50%) scale(1.0)', opacity: 1, offset: 0.5 },
+            { transform: 'translate(-50%, -50%) scale(1.12)', opacity: 0 }
+          ];
+
+      const b = document.createElement('div');
+      b.className = 'balloon';
+      b.dataset.shape = v;
+      b.style.setProperty('--c', color);
+      b.style.width = dim + 'px';
+      b.style.height = dim + 'px';
+      b.style.left = cx + 'px';
+      b.style.top = cy + 'px';
+      sparkLayer.appendChild(b);
+
+      requestAnimationFrame(function () {
+        b.animate(frames, { duration: dur, easing: easing, fill: 'forwards' });
+      });
+      // Deterministic cleanup — never rely on the overlay anim's onfinish.
+      setTimeout(function () { if (b.parentNode) b.remove(); }, dur + 140);
+
+      if (pop) {
+        setTimeout(function () {
+          burstParticles(cx, cy, cellSize * 1.5, color, 16);
+        }, dur * 0.45);
+      }
+    }
+
+    // Clear all matched tiles. Board state is changed up front and synchronously;
+    // the pops are pure decoration; the cascade advances on ONE fixed timer. So a
+    // dropped animation callback can never leave a cell empty/unswappable.
+    // Effect assignment: a cell belongs to one effect only — squares claim first
+    // (balloon), then 5+ lines (synchronised pop), then the rest pop individually.
+    function clearMatches(info, done) {
+      if (info.cells.size === 0) { done(); return; }
+      const pop = CLEAR_STYLE === 'pop';
+
+      // 1) Decide effects + capture colours BEFORE we null anything.
+      const claimed = new Set();
+      const squareGroups = [];
+      info.squares.forEach(function (sq) {
+        const grp = [
+          [sq.r, sq.c], [sq.r, sq.c + 1],
+          [sq.r + 1, sq.c], [sq.r + 1, sq.c + 1]
+        ];
+        let clash = false;
+        grp.forEach(function (rc) { if (claimed.has(rc[0] + ',' + rc[1])) clash = true; });
+        if (clash) return;
+        grp.forEach(function (rc) { claimed.add(rc[0] + ',' + rc[1]); });
+        squareGroups.push({ grp: grp, v: sq.v });
+      });
+
+      const lineGroups = [];
+      if (ROW_POP) {
+        info.lines5.forEach(function (run) {
+          const keys = run.filter(function (k) { return !claimed.has(k); });
+          if (keys.length === 0) return;
+          keys.forEach(function (k) { claimed.add(k); });
+          lineGroups.push(keys.map(function (k) {
+            const p = k.split(',');
+            const mr = +p[0], mc = +p[1];
+            return { mr: mr, mc: mc, color: COLORS[board[mr][mc]] };
+          }));
+        });
+      }
+
+      const singleItems = [];
+      const matchedList = [];
+      info.cells.forEach(function (key) {
+        const p = key.split(',');
+        const mr = +p[0], mc = +p[1];
+        matchedList.push([mr, mc]);
+        if (!claimed.has(key)) {
+          singleItems.push({ mr: mr, mc: mc, color: COLORS[board[mr][mc]] });
+        }
+      });
+
+      // 2) Null EVERY matched cell now, synchronously, and sync the DOM. From here
+      //    on board[][] is correct no matter what the animations do (or don't do).
+      matchedList.forEach(function (rc) {
+        board[rc[0]][rc[1]] = null;
+        syncCell(rc[0], rc[1]);
+      });
+
+      // 3) Pure-decoration pops. Their running animations override the cells'
+      //    hidden state to show the pop; they never touch board/cascade.
+      const anims = [];
+      const indDur = pop ? POP_MS : GENTLE_MS;
+      const lineDur = pop ? 360 : 470;
+      const ballDur = pop ? 430 : 560;
+      let maxDur = indDur;
+
+      squareGroups.forEach(function (s) {
+        balloonPop(s.grp, s.v, pop, ballDur, anims);
+        if (ballDur > maxDur) maxDur = ballDur;
+      });
+      lineGroups.forEach(function (items) {
+        linePop(items, pop, lineDur, anims);
+        if (lineDur > maxDur) maxDur = lineDur;
+      });
+      singleItems.forEach(function (it) {
+        individualPop(it.mr, it.mc, it.color, pop, indDur, anims);
+      });
+
+      // 4) Advance the cascade exactly once on a fixed timer — never on a callback.
+      //    Cancel the (now-finished) pop animations first so the refill paints
+      //    cleanly without any leftover fill-forwards.
+      setTimeout(function () {
+        anims.forEach(function (a) { try { a.cancel(); } catch (_) {} });
+        done();
+      }, maxDur + CLEAR_BUFFER_MS);
     }
 
     // ---- Gravity, refill & cascades ----
@@ -762,9 +995,9 @@
     // then repeat for as long as fresh matches keep appearing. Every clear looks
     // identical regardless of how deep the chain runs — no counters, no escalation.
     function resolveCascades(done) {
-      const matched = findMatches();
-      if (matched.size === 0) { done(); return; }
-      clearMatches(matched, function () {
+      const info = analyzeBoard();
+      if (info.cells.size === 0) { done(); return; }
+      clearMatches(info, function () {
         const moves = applyGravity();
         animateGravity(moves, function () {
           resolveCascades(done);
@@ -780,6 +1013,7 @@
     const GENTLE_MS = 300;        // 'gentle' clear: slow soft swell-then-fade
     const POP_MS = 190;           // 'pop' clear: quicker balloon-style burst
     const POP_PARTICLE_MS = 820;  // firework spark lifetime (pop mode) — long & showy
+    const CLEAR_BUFFER_MS = 90;   // grace added after the longest pop before refill
     const FALL_MS = 260;          // per-step gravity / refill fall duration
     const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
     const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
@@ -792,6 +1026,18 @@
       const saved = localStorage.getItem('hush-clear-style');
       if (saved === 'gentle' || saved === 'pop') CLEAR_STYLE = saved;
     } catch (_) { /* private mode / storage disabled: just use the default */ }
+
+    // Tier pay-off toggles, both default ON, live-switchable + persisted.
+    //   SQUARE_POP — detect 2x2 squares as matches (balloon pop)
+    //   ROW_POP    — give 5+ lines the synchronised swell-pop
+    let SQUARE_POP = true;
+    let ROW_POP = true;
+    try {
+      const sq = localStorage.getItem('hush-square-pop');
+      if (sq === 'on' || sq === 'off') SQUARE_POP = sq === 'on';
+      const rw = localStorage.getItem('hush-row-pop');
+      if (rw === 'on' || rw === 'off') ROW_POP = rw === 'on';
+    } catch (_) { /* storage disabled: keep defaults */ }
 
     const drag = {
       active: false,
@@ -1080,6 +1326,38 @@
     clearGentleBtn.addEventListener('click', function () { setClearStyle('gentle'); });
     clearPopBtn.addEventListener('click', function () { setClearStyle('pop'); });
     renderClearStyle();
+
+    // Square pop on/off — switches live (analyzeBoard reads SQUARE_POP) + persists.
+    const squareOnBtn = document.getElementById('square-on');
+    const squareOffBtn = document.getElementById('square-off');
+    function renderSquarePop() {
+      squareOnBtn.classList.toggle('active', SQUARE_POP);
+      squareOffBtn.classList.toggle('active', !SQUARE_POP);
+    }
+    function setSquarePop(on) {
+      SQUARE_POP = on;
+      try { localStorage.setItem('hush-square-pop', on ? 'on' : 'off'); } catch (_) {}
+      renderSquarePop();
+    }
+    squareOnBtn.addEventListener('click', function () { setSquarePop(true); });
+    squareOffBtn.addEventListener('click', function () { setSquarePop(false); });
+    renderSquarePop();
+
+    // Row pop on/off — switches live (clearMatches reads ROW_POP) + persists.
+    const rowOnBtn = document.getElementById('row-on');
+    const rowOffBtn = document.getElementById('row-off');
+    function renderRowPop() {
+      rowOnBtn.classList.toggle('active', ROW_POP);
+      rowOffBtn.classList.toggle('active', !ROW_POP);
+    }
+    function setRowPop(on) {
+      ROW_POP = on;
+      try { localStorage.setItem('hush-row-pop', on ? 'on' : 'off'); } catch (_) {}
+      renderRowPop();
+    }
+    rowOnBtn.addEventListener('click', function () { setRowPop(true); });
+    rowOffBtn.addEventListener('click', function () { setRowPop(false); });
+    renderRowPop();
 
     // Info / how-to-play panel: same calm style, open / close only.
     const infoPanel = document.getElementById('info-panel');
