@@ -614,22 +614,24 @@
       const size = rect.width;
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
-      const sparkSize = Math.max(4, size * 0.13);
-      const reach = size * 0.6;
-      const count = 9;
+      const baseSize = Math.max(7, size * 0.26);   // bigger sparks
+      const reach = size * 1.25;                    // travel well beyond the cell
+      const count = 12;                             // more sparks
       for (let i = 0; i < count; i++) {
         const p = document.createElement('div');
         p.className = 'spark';
+        const sparkSize = baseSize * (0.7 + Math.random() * 0.6);   // varied sizes
         p.style.background = color;
         p.style.width = sparkSize + 'px';
         p.style.height = sparkSize + 'px';
+        p.style.boxShadow = '0 0 ' + (sparkSize * 0.9) + 'px ' + color;  // soft glow
         p.style.left = cx + 'px';
         p.style.top = cy + 'px';
         p.style.transform = 'translate(-50%, -50%)';  // centred before it animates
         sparkLayer.appendChild(p);
 
-        const ang = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-        const r = reach * (0.7 + Math.random() * 0.55);
+        const ang = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+        const r = reach * (0.65 + Math.random() * 0.6);
         const dx = Math.cos(ang) * r;
         const dy = Math.sin(ang) * r;
 
@@ -638,8 +640,9 @@
           requestAnimationFrame(function () {
             const anim = el.animate([
               { transform: 'translate(-50%, -50%) translate(0, 0) scale(1)', opacity: 1 },
-              { transform: 'translate(-50%, -50%) translate(' + dx + 'px, ' + dy + 'px) scale(0.25)', opacity: 0 }
-            ], { duration: POP_PARTICLE_MS, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+              { transform: 'translate(-50%, -50%) translate(' + (dx * 0.5) + 'px, ' + (dy * 0.5) + 'px) scale(1.15)', opacity: 1, offset: 0.25 },
+              { transform: 'translate(-50%, -50%) translate(' + dx + 'px, ' + dy + 'px) scale(0.3)', opacity: 0 }
+            ], { duration: POP_PARTICLE_MS, easing: 'cubic-bezier(.15,.75,.3,1)', fill: 'forwards' });
             anim.onfinish = function () { anim.cancel(); el.remove(); };
           });
         })(p, dx, dy);
@@ -663,7 +666,7 @@
       const frames = pop
         ? [
             { opacity: 1, transform: 'scale(1)' },
-            { opacity: 1, transform: 'scale(1.32)', offset: 0.35 },
+            { opacity: 1, transform: 'scale(1.5)', offset: 0.3 },
             { opacity: 0, transform: 'scale(0)' }
           ]
         : [
@@ -776,7 +779,7 @@
     const SWAP_MS = 180;          // swap / revert animation duration
     const GENTLE_MS = 300;        // 'gentle' clear: slow soft swell-then-fade
     const POP_MS = 190;           // 'pop' clear: quicker balloon-style burst
-    const POP_PARTICLE_MS = 460;  // firework spark lifetime (pop mode)
+    const POP_PARTICLE_MS = 820;  // firework spark lifetime (pop mode) — long & showy
     const FALL_MS = 260;          // per-step gravity / refill fall duration
     const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
     const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
