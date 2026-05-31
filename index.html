@@ -228,6 +228,45 @@
       letter-spacing: 0.04em;
     }
 
+    /* A labelled setting row + calm segmented toggle (e.g. Gentle / Pop). */
+    .setting {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .setting-label {
+      font-size: 16px;
+      letter-spacing: 0.02em;
+      color: var(--ink-strong);
+      opacity: 0.85;
+    }
+    .seg {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+    }
+    .seg-btn {
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink-strong);
+      background: transparent;
+      border: none;
+      border-radius: 999px;
+      padding: 8px 22px;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      touch-action: manipulation;
+    }
+    .seg-btn.active {
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 1px 3px rgba(92, 76, 56, 0.16);
+    }
+
     /* ---- Board ----
        5 columns wide x 10 rows tall. Sized natively with CSS only. Never use a
        JS transform: scale() on a fixed-width wrapper — that breaks pointer
@@ -303,6 +342,19 @@
     /* Raise the dragged cell above its neighbours while swapping. */
     .cell.active { z-index: 5; }
 
+    /* Firework spark for the 'pop' clear: a small colour-matched dot that bursts
+       from the cell centre. Positioned + animated entirely via transform. */
+    .spark {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      border-radius: 50%;
+      pointer-events: none;
+      will-change: transform, opacity;
+      transform: translate(-50%, -50%);
+      z-index: 6;
+    }
+
     /* ---- Silhouettes ----
        Clip each stone to its shape. The clipPaths (defined once in the hidden
        SVG at the top of <body>) use objectBoundingBox units, so they scale with
@@ -372,9 +424,16 @@
     </footer>
   </div>
 
-  <!-- Settings stub: heading + close only. Real controls come later. -->
+  <!-- Settings. -->
   <div id="settings-panel" class="surface" hidden>
     <h2>Settings</h2>
+    <div class="setting">
+      <span class="setting-label">Clear effect</span>
+      <div class="seg" role="group" aria-label="Clear effect">
+        <button id="clear-gentle" class="seg-btn" type="button">Gentle</button>
+        <button id="clear-pop" class="seg-btn" type="button">Pop</button>
+      </div>
+    </div>
     <button id="settings-close" class="ctrl" type="button">Close</button>
   </div>
 
@@ -528,21 +587,69 @@
       return matched;
     }
 
-    // Softly dissolve every matched tile (fade + gentle shrink), then empty those
-    // cells in the data and reconcile them. Calls done() once all have finished.
-    function dissolveMatches(matched, done) {
-      const opts = { duration: DISSOLVE_MS, easing: 'ease', fill: 'forwards' };
+    // Fire a small ring of colour-matched sparks out from a cell's centre — the
+    // "firework" that accompanies a Pop clear. Each spark drifts outward, shrinks
+    // and fades, then removes itself. Purely decorative; no effect on state.
+    function burstParticles(cell, color) {
+      const rect = cell.getBoundingClientRect();
+      const size = rect.width;
+      const sparkSize = Math.max(4, size * 0.13);
+      const reach = size * 0.6;
+      const count = 9;
+      for (let i = 0; i < count; i++) {
+        const p = document.createElement('div');
+        p.className = 'spark';
+        p.style.background = color;
+        p.style.width = sparkSize + 'px';
+        p.style.height = sparkSize + 'px';
+        cell.appendChild(p);
+        const ang = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+        const r = reach * (0.7 + Math.random() * 0.55);
+        const dx = Math.cos(ang) * r;
+        const dy = Math.sin(ang) * r;
+        const anim = p.animate([
+          { transform: 'translate(-50%, -50%) translate(0, 0) scale(1)', opacity: 1 },
+          { transform: 'translate(-50%, -50%) translate(' + dx + 'px, ' + dy + 'px) scale(0.25)', opacity: 0 }
+        ], { duration: POP_PARTICLE_MS, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+        anim.onfinish = function () { anim.cancel(); p.remove(); };
+      }
+    }
+
+    // Clear every matched tile by popping it individually (one code path, two
+    // intensities chosen by CLEAR_STYLE):
+    //   'gentle' — a slow, soft swell-then-fade that reads almost like a calm
+    //              dissolve. No particles.
+    //   'pop'    — a quicker, livelier burst, with colour-matched firework
+    //              sparks flung out from the centre.
+    // Either way the cell is emptied + reconciled once its pop finishes; the
+    // depth of a cascade never changes how a single clear looks.
+    function clearMatches(matched, done) {
       let pending = matched.size;
       if (pending === 0) { done(); return; }
+      const pop = CLEAR_STYLE === 'pop';
+      const dur = pop ? POP_MS : GENTLE_MS;
+      const easing = pop ? 'cubic-bezier(.3,.75,.4,1)' : 'ease';
+      const frames = pop
+        ? [
+            { opacity: 1, transform: 'scale(1)' },
+            { opacity: 1, transform: 'scale(1.32)', offset: 0.35 },
+            { opacity: 0, transform: 'scale(0)' }
+          ]
+        : [
+            { opacity: 1, transform: 'scale(1)' },
+            { opacity: 0.92, transform: 'scale(1.12)', offset: 0.32 },
+            { opacity: 0, transform: 'scale(0.25)' }
+          ];
       matched.forEach(function (key) {
         const parts = key.split(',');
         const mr = +parts[0], mc = +parts[1];
         const jewel = tiles[mr][mc];
+        const v = board[mr][mc];
+        if (pop && v !== null && v !== undefined) {
+          burstParticles(jewel.parentNode, COLORS[v]);
+        }
         jewel.style.willChange = 'transform, opacity';
-        const anim = jewel.animate([
-          { opacity: 1, transform: 'scale(1)' },
-          { opacity: 0, transform: 'scale(0.4)' }
-        ], opts);
+        const anim = jewel.animate(frames, { duration: dur, easing: easing, fill: 'forwards' });
         anim.onfinish = function () {
           anim.cancel();
           board[mr][mc] = null;
@@ -623,7 +730,7 @@
     function resolveCascades(done) {
       const matched = findMatches();
       if (matched.size === 0) { done(); return; }
-      dissolveMatches(matched, function () {
+      clearMatches(matched, function () {
         const moves = applyGravity();
         animateGravity(moves, function () {
           resolveCascades(done);
@@ -636,11 +743,21 @@
     // with a gentle animation. If the swap forms a match the matched tiles
     // dissolve; if not, the swap quietly reverts.
     const SWAP_MS = 180;          // swap / revert animation duration
-    const DISSOLVE_MS = 280;      // matched-tile dissolve duration
+    const GENTLE_MS = 300;        // 'gentle' clear: slow soft swell-then-fade
+    const POP_MS = 190;           // 'pop' clear: quicker balloon-style burst
+    const POP_PARTICLE_MS = 460;  // firework spark lifetime (pop mode)
     const FALL_MS = 260;          // per-step gravity / refill fall duration
     const AXIS_LOCK_PX = 4;       // movement before we commit to a direction
     const COMMIT_FRACTION = 0.4;  // how far to drag (of one cell) to swap
     const NUDGE_FRACTION = 0.66;  // how far the HELD jewel nudges (of one cell)
+
+    // Clear-effect intensity: 'gentle' (default) or 'pop'. Live-switchable from
+    // Settings and remembered in localStorage.
+    let CLEAR_STYLE = 'gentle';
+    try {
+      const saved = localStorage.getItem('hush-clear-style');
+      if (saved === 'gentle' || saved === 'pop') CLEAR_STYLE = saved;
+    } catch (_) { /* private mode / storage disabled: just use the default */ }
 
     const drag = {
       active: false,
@@ -912,6 +1029,23 @@
     document.getElementById('settings-close').addEventListener('click', function () {
       settingsPanel.hidden = true;
     });
+
+    // Clear-effect toggle (Gentle / Pop): switches live and persists. The next
+    // clear simply reads CLEAR_STYLE, so changes take effect immediately.
+    const clearGentleBtn = document.getElementById('clear-gentle');
+    const clearPopBtn = document.getElementById('clear-pop');
+    function renderClearStyle() {
+      clearGentleBtn.classList.toggle('active', CLEAR_STYLE === 'gentle');
+      clearPopBtn.classList.toggle('active', CLEAR_STYLE === 'pop');
+    }
+    function setClearStyle(style) {
+      CLEAR_STYLE = style;
+      try { localStorage.setItem('hush-clear-style', style); } catch (_) {}
+      renderClearStyle();
+    }
+    clearGentleBtn.addEventListener('click', function () { setClearStyle('gentle'); });
+    clearPopBtn.addEventListener('click', function () { setClearStyle('pop'); });
+    renderClearStyle();
 
     // Info / how-to-play panel: same calm style, open / close only.
     const infoPanel = document.getElementById('info-panel');
