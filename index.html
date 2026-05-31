@@ -58,16 +58,18 @@
     /* ---- Shell: one centred column whose width tracks the board, so the
        header and bottom bar line up directly above and below the board on
        every screen size (never floating out at the viewport edges). The board
-       outer width is --cell * 6.098 (6 cells + 7 gaps), so the shell uses the
-       same figure and the board fills it exactly. */
+       is 5 cells + 6 gaps wide (= --cell * 5.084) and 10 cells + 11 gaps tall
+       (= --cell * 10.154), so the shell uses the width figure and the board
+       fills it exactly. --cell is the SMALLER of the width- and height-limited
+       sizes, so the whole board always fits with no clipped rows and no zoom. */
     #shell {
       --cell: min(
-        calc((100vw - 32px) / 6.098),
+        calc((100vw - 32px) / 5.084),
         calc((100dvh - var(--header-h) - var(--footer-h)
                - env(safe-area-inset-top) - env(safe-area-inset-bottom)
-               - 24px) / 12.182)
+               - 24px) / 10.154)
       );
-      width: calc(var(--cell) * 6.098);
+      width: calc(var(--cell) * 5.084);
       flex: 1 1 auto;
       min-height: 0;
       display: flex;
@@ -227,22 +229,21 @@
     }
 
     /* ---- Board ----
-       6 columns wide x 12 rows tall. Sized natively with CSS only. Never use a
+       5 columns wide x 10 rows tall. Sized natively with CSS only. Never use a
        JS transform: scale() on a fixed-width wrapper — that breaks pointer
        coords + position:fixed drags.
 
        The board is taller than wide, so the limiting dimension may be width OR
-       height depending on the phone. We size a single square --cell to the
-       SMALLER of (available width / 6) and (available height / 12), leaving a
-       ~16px gutter on every edge. The divisors include the gaps + padding
-       (each = --cell * 0.014): width = cell*(6 + 7*g), height = cell*(12 + 13*g),
-       so the whole board always fits with no overflow and no zoom.
+       height depending on the phone. --cell (defined on #shell) is the SMALLER
+       of (available width / 5.084) and (available height / 10.154); the divisors
+       fold in the gaps + padding (each = --cell * 0.014), so the whole board
+       always fits with no overflow and no zoom.
 
-       The available height now excludes the header + footer bars and the safe
+       The available height excludes the header + footer bars and the safe
        areas, so no rows clip and no zoom is ever needed. */
     #game {
-      --cols: 6;
-      --rows: 12;
+      --cols: 5;
+      --rows: 10;
       /* --cell is defined on #shell and inherited here, so the board and the
          shell (header + footer) share exactly one width. */
       --gap: calc(var(--cell) * 0.014);
@@ -268,45 +269,79 @@
     .cell.light { background: #f2ebdf; }
     .cell.dark  { background: #e9dfce; }
 
-    /* Softly three-dimensional jewel: muted, low-gloss, tactile.
-       Colour comes from --c (set per cell in JS). Overlays are translucent
-       black/white so the facet/highlight works for any base colour. */
+    /* Softly three-dimensional cut stone: muted, low-gloss, tactile.
+       The piece IS its shape — the box is clipped to a silhouette (see the
+       data-shape rules below). Colour comes from --c; the translucent
+       white/black gradients give a top-left highlight sliding into a lower-right
+       shade, so it reads as a gently bevelled, raised stone for any base colour.
+       The drop-shadow follows the clipped silhouette (box-shadow would not). */
     .jewel {
-      width: 76%;
-      height: 76%;
-      border-radius: 30%;
+      position: relative;
+      width: 80%;
+      height: 80%;
       background:
-        radial-gradient(115% 115% at 32% 26%,
-          rgba(255, 255, 255, 0.40) 0%,
-          rgba(255, 255, 255, 0.06) 38%,
-          rgba(255, 255, 255, 0) 60%),
-        linear-gradient(148deg,
-          rgba(255, 255, 255, 0.12) 0%,
-          rgba(0, 0, 0, 0.00) 42%,
-          rgba(0, 0, 0, 0.18) 100%),
+        radial-gradient(125% 125% at 30% 24%,
+          rgba(255, 255, 255, 0.46) 0%,
+          rgba(255, 255, 255, 0.10) 32%,
+          rgba(255, 255, 255, 0) 55%),
+        linear-gradient(145deg,
+          rgba(255, 255, 255, 0.16) 0%,
+          rgba(0, 0, 0, 0.00) 44%,
+          rgba(0, 0, 0, 0.22) 100%),
         var(--c, #b9a98f);
-      box-shadow:
-        inset 0 2px 3px rgba(255, 255, 255, 0.30),
-        inset 0 -3px 5px rgba(0, 0, 0, 0.20),
-        0 3px 5px rgba(92, 76, 56, 0.18);
+      filter: drop-shadow(0 2px 2.5px rgba(92, 76, 56, 0.30));
     }
 
-    /* A lifted (being dragged) jewel: gently deeper shadow. It is moved with
-       transform: translate3d(...) only — never left/top — and gets
-       will-change to keep iOS from leaving shadow trails. */
+    /* A lifted (being dragged) stone: a deeper, softer shadow. Moved with
+       transform: translate3d(...) only — never left/top — and gets will-change
+       to keep iOS from leaving shadow trails. */
     .jewel.lift {
       will-change: transform;
-      box-shadow:
-        inset 0 2px 3px rgba(255, 255, 255, 0.30),
-        inset 0 -3px 5px rgba(0, 0, 0, 0.20),
-        0 9px 16px rgba(92, 76, 56, 0.28);
+      filter: drop-shadow(0 7px 10px rgba(92, 76, 56, 0.34));
     }
 
     /* Raise the dragged cell above its neighbours while swapping. */
     .cell.active { z-index: 5; }
+
+    /* ---- Silhouettes ----
+       Clip each stone to its shape. The clipPaths (defined once in the hidden
+       SVG at the top of <body>) use objectBoundingBox units, so they scale with
+       the square stone at any cell size. Shape is chosen from data-shape, which
+       mirrors the colour index 1:1 — so the silhouette is also the colourblind
+       cue, and it's distinguishable in greyscale by outline alone.
+         0 red = heart   1 purple = asscher (cut-corner square)
+         2 green = hexagon (flat-top)   3 blue = rhombus (diamond)   4 gold = circle  */
+    .jewel[data-shape="0"] { clip-path: url(#gem-heart); }     /* red */
+    .jewel[data-shape="1"] { clip-path: url(#gem-asscher); }   /* purple */
+    .jewel[data-shape="2"] { clip-path: url(#gem-hexagon); }   /* green */
+    .jewel[data-shape="3"] { clip-path: url(#gem-rhombus); }   /* blue */
+    .jewel[data-shape="4"] { clip-path: url(#gem-circle); }    /* gold */
   </style>
 </head>
 <body>
+  <!-- Stone silhouettes as clip-paths. objectBoundingBox units (0–1) scale with
+       the square stone, so one definition works at any cell size. Kept offscreen
+       and zero-sized; referenced from CSS via clip-path: url(#gem-…). -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <clipPath id="gem-heart" clipPathUnits="objectBoundingBox">
+        <path d="M0.5,1 C0.10,0.70 0,0.42 0,0.27 C0,0.08 0.27,0 0.5,0.22 C0.73,0 1,0.08 1,0.27 C1,0.42 0.90,0.70 0.5,1 Z"/>
+      </clipPath>
+      <clipPath id="gem-asscher" clipPathUnits="objectBoundingBox">
+        <polygon points="0.28,0.02 0.72,0.02 0.98,0.28 0.98,0.72 0.72,0.98 0.28,0.98 0.02,0.72 0.02,0.28"/>
+      </clipPath>
+      <clipPath id="gem-hexagon" clipPathUnits="objectBoundingBox">
+        <polygon points="0.02,0.5 0.27,0.07 0.73,0.07 0.98,0.5 0.73,0.93 0.27,0.93"/>
+      </clipPath>
+      <clipPath id="gem-rhombus" clipPathUnits="objectBoundingBox">
+        <polygon points="0.5,0 1,0.5 0.5,1 0,0.5"/>
+      </clipPath>
+      <clipPath id="gem-circle" clipPathUnits="objectBoundingBox">
+        <ellipse cx="0.5" cy="0.5" rx="0.5" ry="0.5"/>
+      </clipPath>
+    </defs>
+  </svg>
+
   <!-- One centred column: header, board and bottom bar share the board width. -->
   <div id="shell">
     <header id="bar-top">
@@ -358,8 +393,8 @@
 
   <script>
     // ---- Configuration ----
-    const ROWS = 12; // board is 6 wide x 12 tall
-    const COLS = 6;
+    const ROWS = 10; // board is 5 wide x 10 tall
+    const COLS = 5;
 
     // 5 muted, jewel-inspired colours. Easy to change / tune on device.
     const COLORS = [
@@ -424,6 +459,7 @@
           const jewel = document.createElement('div');
           jewel.className = 'jewel';
           jewel.style.setProperty('--c', COLORS[board[r][c]]);
+          jewel.dataset.shape = board[r][c];   // colourblind shape cue
 
           cell.appendChild(jewel);
           gameEl.appendChild(cell);
@@ -448,6 +484,7 @@
         jewel.style.opacity = '0';
       } else {
         jewel.style.setProperty('--c', COLORS[v]);
+        jewel.dataset.shape = v;   // keep the shape cue in step with the colour
         jewel.style.opacity = '';
       }
     }
@@ -562,6 +599,7 @@
         jewel.classList.remove('lift');
         jewel.parentNode.classList.remove('active');
         jewel.style.setProperty('--c', COLORS[m.v]);
+        jewel.dataset.shape = m.v;   // shape cue follows the falling/new colour
         jewel.style.opacity = '';
         jewel.style.willChange = 'transform';
         jewel.style.transition = 'none';
