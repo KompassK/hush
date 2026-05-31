@@ -342,17 +342,23 @@
     /* Raise the dragged cell above its neighbours while swapping. */
     .cell.active { z-index: 5; }
 
-    /* Firework spark for the 'pop' clear: a small colour-matched dot that bursts
-       from the cell centre. Positioned + animated entirely via transform. */
+    /* Single top-level overlay that hosts the 'pop' sparks. Fixed + pointer-
+       transparent + high z-index, so sparks never depend on board clipping or
+       stacking contexts (the reason they were invisible on iOS Safari). */
+    #spark-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 100;
+    }
+    /* A single firework spark: a colour-matched dot placed at the cell's centre
+       in viewport coords (left/top set inline) and moved entirely via transform. */
     .spark {
       position: absolute;
-      left: 50%;
-      top: 50%;
       border-radius: 50%;
       pointer-events: none;
       will-change: transform, opacity;
-      transform: translate(-50%, -50%);
-      z-index: 6;
     }
 
     /* ---- Silhouettes ----
@@ -450,6 +456,11 @@
     <p>Rest well.</p>
   </div>
 
+  <!-- Top-level overlay for 'pop' firework sparks. Fixed and pointer-transparent
+       so sparks are free of any board clipping / stacking contexts (needed on
+       iOS Safari). -->
+  <div id="spark-layer" aria-hidden="true"></div>
+
   <script>
     // ---- Configuration ----
     const ROWS = 10; // board is 5 wide x 10 tall
@@ -502,6 +513,7 @@
     // syncCell(), so the DOM always matches board[][] exactly. The upcoming
     // clearing and cascade stages build on this same single-cell update pattern.
     const gameEl = document.getElementById('game');
+    const sparkLayer = document.getElementById('spark-layer');
     const tiles = [];   // tiles[r][c] = the jewel element living in cell (r, c)
 
     function mountBoard() {
@@ -590,9 +602,18 @@
     // Fire a small ring of colour-matched sparks out from a cell's centre — the
     // "firework" that accompanies a Pop clear. Each spark drifts outward, shrinks
     // and fades, then removes itself. Purely decorative; no effect on state.
+    //
+    // iOS Safari notes: sparks live in a single fixed, pointer-transparent
+    // top-level overlay (#spark-layer) — never inside the cell — so no ancestor
+    // clipping or stacking context can hide them. We capture the cell's rect NOW
+    // (before the clear changes anything), place each spark at that viewport
+    // centre, then kick the animation on the NEXT frame so iOS has laid the
+    // element out first (otherwise .animate() silently no-ops there).
     function burstParticles(cell, color) {
       const rect = cell.getBoundingClientRect();
       const size = rect.width;
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
       const sparkSize = Math.max(4, size * 0.13);
       const reach = size * 0.6;
       const count = 9;
@@ -602,16 +623,26 @@
         p.style.background = color;
         p.style.width = sparkSize + 'px';
         p.style.height = sparkSize + 'px';
-        cell.appendChild(p);
+        p.style.left = cx + 'px';
+        p.style.top = cy + 'px';
+        p.style.transform = 'translate(-50%, -50%)';  // centred before it animates
+        sparkLayer.appendChild(p);
+
         const ang = (Math.PI * 2 * i) / count + Math.random() * 0.5;
         const r = reach * (0.7 + Math.random() * 0.55);
         const dx = Math.cos(ang) * r;
         const dy = Math.sin(ang) * r;
-        const anim = p.animate([
-          { transform: 'translate(-50%, -50%) translate(0, 0) scale(1)', opacity: 1 },
-          { transform: 'translate(-50%, -50%) translate(' + dx + 'px, ' + dy + 'px) scale(0.25)', opacity: 0 }
-        ], { duration: POP_PARTICLE_MS, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
-        anim.onfinish = function () { anim.cancel(); p.remove(); };
+
+        // Lay out first, then animate on the next frame (iOS reliability).
+        (function (el, dx, dy) {
+          requestAnimationFrame(function () {
+            const anim = el.animate([
+              { transform: 'translate(-50%, -50%) translate(0, 0) scale(1)', opacity: 1 },
+              { transform: 'translate(-50%, -50%) translate(' + dx + 'px, ' + dy + 'px) scale(0.25)', opacity: 0 }
+            ], { duration: POP_PARTICLE_MS, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+            anim.onfinish = function () { anim.cancel(); el.remove(); };
+          });
+        })(p, dx, dy);
       }
     }
 
